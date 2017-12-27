@@ -58,6 +58,8 @@ print('Training ------------')
 for step in range(501):
     # data shape = (batch_num, steps, inputs/outputs)
     X_batch, Y_batch, xs = get_batch()
+    print(type(X_batch))
+    print(X_batch.shape)
     cost = model.train_on_batch(X_batch, Y_batch)
     pred = model.predict(X_batch, BATCH_SIZE)
     plt.plot(xs[0, :], Y_batch[0].flatten(), 'r', xs[0, :], pred.flatten()[:TIME_STEPS], 'b--')
