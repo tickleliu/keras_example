@@ -1,4 +1,7 @@
 .idea/
 MNIST/
 __pycache__/
+train/
+*.zip
+*.h5
 
