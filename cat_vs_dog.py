@@ -1,6 +1,8 @@
 import os
 import shutil
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 
 def prepare_data():
     original_dataset_dir = os.path.join(os.getcwd(), "train")
@@ -67,34 +69,38 @@ def prepare_data():
 # prepare_data()
 
 from keras.layers import Input, Conv2D, Flatten, Dense, MaxPooling2D, Dropout, BatchNormalization
-from keras.models import Model, Sequential
-from keras.applications import VGG16
+from keras.models import Model
 
+# conv_base = VGG16(include_top=False, input_shape=(150, 150, 3), weights='imagenet')
+# conv_base.trainable = False
+# model = Sequential()
+# model.add(conv_base)
+# model.add(Flatten())
+# model.add(Dense(256, activation='relu'))
+# model.add(Dense(2, activation='softmax'))
 input = Input(shape=(150, 150, 3))
-conv_base = VGG16(include_top=False, input_shape=(150, 150, 3), weights='imagenet')
-conv_base.trainable = False
-model = Sequential()
-model.add(conv_base)
-model.add(Flatten())
-model.add(Dense(256, activation='relu'))
-model.add(Dense(2, activation='softmax'))
-# x = Conv2D(32, (3, 3), activation='relu')(input)
-# x = MaxPooling2D((2, 2))(x)
-# x = Conv2D(64, (3, 3), activation='relu')(x)
-# x = BatchNormalization()(x)
-# x = MaxPooling2D((2, 2))(x)
-# x = Conv2D(128, (3, 3), activation='relu')(x)
-# x = BatchNormalization()(x)
-# x = Dropout(rate=0.5)(x)
-# x = MaxPooling2D((2, 2))(x)
-# x = Conv2D(128, (3, 3), activation='relu')(x)
-# x = BatchNormalization()(x)
-# x = Dropout(rate=0.5)(x)
-# x = MaxPooling2D((2, 2))(x)
-# x = Flatten()(x)
-# x = Dropout(rate=0.5)(x)
-# x = Dense(512, activation='relu')(x)
-# x = Dense(2, activation='softmax')(x)
+x = Conv2D(32, (3, 3), activation='relu')(input)
+x1 = x
+x = MaxPooling2D((2, 2))(x)
+x = Conv2D(64, (3, 3), activation='relu')(x)
+x2 = x
+x = BatchNormalization()(x)
+x = MaxPooling2D((2, 2))(x)
+x = Conv2D(128, (3, 3), activation='relu')(x)
+x3 = x
+x = BatchNormalization()(x)
+x = Dropout(rate=0.5)(x)
+x = MaxPooling2D((2, 2))(x)
+x = Conv2D(128, (3, 3), activation='relu')(x)
+x4 = x
+x = BatchNormalization()(x)
+x = Dropout(rate=0.5)(x)
+x = MaxPooling2D((2, 2))(x)
+x = Flatten()(x)
+x = Dropout(rate=0.5)(x)
+x = Dense(512, activation='relu')(x)
+x = Dense(2, activation='softmax')(x)
+model = Model(inputs=[input], outputs=[x])
 
 from keras.optimizers import Adam
 from keras.losses import categorical_crossentropy
@@ -118,21 +124,38 @@ for data_batch, label_batch in train_generator:
     print("label batch shape", label_batch.shape)
     break
 
-history = model.fit_generator(train_generator, steps_per_epoch=100, epochs=10, validation_data=test_generator, validation_steps=30)
-model.save('cats_vs_dogs.h5')
-import matplotlib.pyplot as plt
-acc = history.history['acc']
-val_acc = history.history['val_acc']
-loss = history.history['loss']
-val_loss = history.history['val_loss']
-epochs = range(1, len(acc) + 1)
-plt.plot(epochs, acc, 'bo', label='Training acc')
-plt.plot(epochs, val_acc, 'b', label='Validation acc')
-plt.title('Training and validation accuracy')
-plt.legend()
-plt.figure()
-plt.plot(epochs, loss, 'bo', label='Training loss')
-plt.plot(epochs, val_loss, 'b', label='Validation loss')
-plt.title('Training and validation loss')
-plt.legend()
-plt.show()
+# history = model.fit_generator(train_generator, steps_per_epoch=100, epochs=10, validation_data=test_generator, validation_steps=30)
+# model.save('cats_vs_dogs.h5')
+
+from keras.preprocessing import image
+from keras.models import load_model
+import numpy as np
+
+img = image.load_img(os.path.join(os.getcwd(), 'train', 'test', 'cat', 'cat.1849.jpg'), target_size=(150, 150))
+img_tensor = image.img_to_array(img)
+img_tensor = np.expand_dims(img_tensor, axis=0)
+img_tensor /= 255.
+
+model = load_model("cats_vs_dogs.h5")
+output_layers = [layer.output for layer in model.layers[: 8]]
+activation_model = Model(inputs=model.input, outputs=output_layers)
+activations = activation_model.predict(img_tensor)
+[print(activation.shape) for activation in activations]
+
+# import matplotlib.pyplot as plt
+# acc = history.history['acc']
+# val_acc = history.history['val_acc']
+# loss = history.history['loss']
+# val_loss = history.history['val_loss']
+# epochs = range(1, len(acc) + 1)
+# plt.plot(epochs, acc, 'bo', label='Training acc')
+# plt.plot(epochs, val_acc, 'b', label='Validation acc')
+# plt.title('Training and validation accuracy')
+# plt.legend()
+# plt.figure()
+# plt.plot(epochs, loss, 'bo', label='Training loss')
+# plt.plot(epochs, val_loss, 'b', label='Validation loss')
+# plt.title('Training and validation loss')
+# plt.legend()
+# plt.show()
+
