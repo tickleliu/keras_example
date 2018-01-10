@@ -1,7 +1,7 @@
 import os
 import shutil
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def prepare_data():
@@ -66,6 +66,7 @@ def prepare_data():
         dst = os.path.join(test_dir_dog, fname)
         shutil.copy(src, dst)
 
+
 # prepare_data()
 
 from keras.layers import Input, Conv2D, Flatten, Dense, MaxPooling2D, Dropout, BatchNormalization
@@ -106,6 +107,7 @@ from keras.optimizers import Adam
 from keras.losses import categorical_crossentropy
 
 model.compile(optimizer=Adam(), loss=categorical_crossentropy, metrics=['acc'])
+model.summary()
 
 from keras.preprocessing.image import ImageDataGenerator
 
@@ -116,8 +118,10 @@ val_dir = os.path.join(base_dir, "val")
 train_datagen = ImageDataGenerator(rescale=1. / 255, horizontal_flip=True)
 test_datagen = ImageDataGenerator(rescale=1. / 255, horizontal_flip=True)
 
-train_generator = train_datagen.flow_from_directory(train_dir, target_size=(150, 150), batch_size=20, class_mode="categorical")
-test_generator = test_datagen.flow_from_directory(val_dir, target_size=(150, 150), batch_size=20, class_mode="categorical")
+train_generator = train_datagen.flow_from_directory(train_dir, target_size=(150, 150), batch_size=20,
+                                                    class_mode="categorical")
+test_generator = test_datagen.flow_from_directory(val_dir, target_size=(150, 150), batch_size=20,
+                                                  class_mode="categorical")
 
 for data_batch, label_batch in train_generator:
     print("data batch shape", data_batch.shape)
@@ -137,12 +141,92 @@ img_tensor = np.expand_dims(img_tensor, axis=0)
 img_tensor /= 255.
 
 model = load_model("cats_vs_dogs.h5")
+
+from keras.applications import VGG16
+
+model = VGG16(weights='imagenet', include_top=False)
 output_layers = [layer.output for layer in model.layers[: 8]]
 activation_model = Model(inputs=model.input, outputs=output_layers)
 activations = activation_model.predict(img_tensor)
 [print(activation.shape) for activation in activations]
 
-# import matplotlib.pyplot as plt
+layer_name = "block4_conv1"
+# layer_name = "conv2d_2"
+filter_index = 30
+
+from keras import backend as K
+
+layer_output = model.get_layer(layer_name).output
+loss = K.mean(layer_output[:, :, : filter_index])
+grads = K.gradients(loss, model.input)[0]
+print(grads.shape)
+grads /= (K.sqrt(K.mean(K.square(grads))) + 1e-5)
+iterator = K.function([model.input], [loss, grads])
+
+import numpy as np
+
+loss_value, grads_value = iterator([np.zeros((1, 150, 150, 3))])
+input_img_data = np.random.random((1, 150, 150, 3)) * 20 + 128.
+for i in range(400):
+    loss_value, grads_value = iterator([input_img_data])
+    input_img_data += grads_value * 1.0
+
+def deprocess_image(x):
+     # normalize tensor: center on 0., ensure std is 0.1
+     x -= x.mean()
+     x /= (x.std() + 1e-5)
+     x *= 0.1
+     # clip to [0, 1]
+     x += 0.5
+     x = np.clip(x, 0, 1)
+     # convert to RGB array
+     x *= 255
+     x = np.clip(x, 0, 255).astype('uint8')
+     return x
+input_img_data = deprocess_image(input_img_data)
+
+
+from keras.applications.vgg16 import preprocess_input, decode_predictions
+model = VGG16(weights="imagenet")
+img = image.load_img(os.path.join(os.getcwd(), 'train', 'test', 'cat', 'cat.1849.jpg'), target_size=(224, 224))
+img_tensor = image.img_to_array(img)
+img_tensor = np.expand_dims(img_tensor, axis=0)
+img_tensor = preprocess_input(img_tensor)
+print(decode_predictions(model.predict(img_tensor)))
+print(np.argmax(model.predict(img_tensor)[0]))
+# This is the "african elephant" entry in the prediction vector
+african_elephant_output = model.output[:, 285]
+# The is the output feature map of the `block5_conv3` layer,
+# the last convolutional layer in VGG16
+last_conv_layer = model.get_layer('block5_conv3')
+# This is the gradient of the "african elephant" class with regard to
+# the output feature map of `block5_conv3`
+grads = K.gradients(african_elephant_output, last_conv_layer.output)[0]
+# This is a vector of shape (512,), where each entry
+# is the mean intensity of the gradient over a specific feature map channel
+pooled_grads = K.mean(grads, axis=(0, 1, 2))
+# This function allows us to access the values of the quantities we just defined:
+# `pooled_grads` and the output feature map of `block5_conv3`,
+# given a sample image
+iterate = K.function([model.input], [pooled_grads, last_conv_layer.output[0]])
+# These are the values of these two quantities, as Numpy arrays,
+# given our sample image of two elephants
+pooled_grads_value, conv_layer_output_value = iterate([img_tensor])
+# We multiply each channel in the feature map array
+# by "how important this channel is" with regard to the elephant class
+for i in range(512):
+  conv_layer_output_value[:, :, i] *= pooled_grads_value[i]
+# The channel-wise mean of the resulting feature map
+# is our heatmap of class activation
+heatmap = np.mean(conv_layer_output_value, axis=-1)
+
+import matplotlib.pyplot as plt
+# plt.imshow(input_img_data[0, :, :, :])
+heatmap = np.maximum(heatmap, 0)
+heatmap /= np.max(heatmap)
+plt.matshow(heatmap)
+plt.show()
+
 # acc = history.history['acc']
 # val_acc = history.history['val_acc']
 # loss = history.history['loss']
@@ -158,4 +242,3 @@ activations = activation_model.predict(img_tensor)
 # plt.title('Training and validation loss')
 # plt.legend()
 # plt.show()
-
