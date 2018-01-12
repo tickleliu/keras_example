@@ -3,5 +3,6 @@ MNIST/
 __pycache__/
 train/
 *.zip
+*.gz
 *.h5
 
