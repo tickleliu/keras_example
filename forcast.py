@@ -19,7 +19,7 @@ data = np.transpose(data, [1, 0])
 from matplotlib import pyplot as plt
 
 data_shape = data.shape
-plt.plot(range(data_shape[0]), data[:, 1])
+# plt.plot(range(data_shape[0]), data[:, 1])
 mean = data.mean(axis=0)
 std = data.std(axis=0)
 data -= mean
@@ -75,13 +75,15 @@ x = Dense(1)(x)
 
 model = Model(inputs=[input], outputs=[x])
 model.compile(optimizer='rmsprop', loss='mae')
-model.fit([x_train], [y_train], epochs=10)
-
-print(model.evaluate([x_test], [y_test]))
-
 
 # train
-
+# model.fit([x_train], [y_train], epochs=10)
+# model.save_weights("forecast.h5")
+model.load_weights("forecast.h5")
 # evaluate
+y_result = model.predict_on_batch([x_train])
 
+plt.plot(range(1000), y_train, color='r')
+plt.plot(range(1000), y_result, color='b')
+plt.show()
 # display result
