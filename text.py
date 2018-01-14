@@ -1,3 +1,4 @@
+#coding: utf-8
 import os
 
 imdb_dir = os.path.join(os.getcwd(), "aclImdb")
@@ -10,7 +11,7 @@ for label_type in ['neg', 'pos']:
     dir_name = os.path.join(train_dir, label_type)
     for fname in os.listdir(dir_name):
         if fname[-4:] == '.txt':
-            with open(os.path.join(dir_name, fname)) as fopen:
+            with open(os.path.join(dir_name, fname), encoding='utf-8') as fopen:
                 texts.append(fopen.read())
                 if label_type == 'neg':
                     labels.append(0)
@@ -47,7 +48,7 @@ y_test = labels[training_samples: validation_samples + training_samples]
 
 glove_dir = os.getcwd()
 embeddings_index = {}
-with open(os.path.join(glove_dir, "glove.6B.100d.txt")) as f:
+with open(os.path.join(glove_dir, "glove.6B.100d.txt"), encoding='utf-8') as f:
     for line in f.readlines():
         values = line.split()
         word = values[0]
@@ -79,3 +80,21 @@ model.compile(optimizer="rmsprop", loss='binary_crossentropy', metrics=['acc'])
 histroy = model.fit(x_train, y_trian, epochs=10, batch_size=32, validation_split=0.2)
 model.save_weights("text.h5")
 
+test_dir = os.path.join(imdb_dir, 'test')
+labels = []
+texts = []
+
+for label_type in ['neg', 'pos']:
+    dir_name = os.path.join(train_dir, label_type)
+    for fname in os.listdir(dir_name):
+        if fname[-4:] == '.txt':
+            with open(os.path.join(dir_name, fname), encoding='utf-8') as fopen:
+                texts.append(fopen.read())
+                if label_type == 'neg':
+                    labels.append(0)
+                else:
+                    labels.append(1)
+sequences = tokenizer.texts_to_sequences(texts)
+x_test = pad_sequences(sequences, maxlen=maxlen)
+y_test = np.asarray(labels)
+model.evaluate(x_test, y_test)

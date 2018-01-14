@@ -5,4 +5,6 @@ train/
 *.zip
 *.gz
 *.h5
-
+*.csv
+*.txt
+aclImdb/
