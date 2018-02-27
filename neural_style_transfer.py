@@ -1,9 +1,9 @@
 from keras.preprocessing.image import load_img, img_to_array
 
 # This is the path to the image you want to transform.
-target_image_path = '/home/ubuntu/data/portrait.png'
+target_image_path = 'H:/keras_example/time.jpg'
 # This is the path to the style image.
-style_reference_image_path = '/home/ubuntu/data/popova.jpg'
+style_reference_image_path = 'H:/keras_example/style.jpg'
 
 # Dimensions of the generated picture.
 width, height = load_img(target_image_path).size
@@ -103,6 +103,12 @@ for layer_name in style_layers:
     loss += (style_weight / len(style_layers)) * sl
 loss += total_variation_weight * total_variation_loss(combination_image)
 
+# Get the gradients of the generated image wrt the loss
+grads = K.gradients(loss, combination_image)[0]
+
+# Function to fetch the values of the current loss and the current gradients
+fetch_loss_and_grads = K.function([combination_image], [loss, grads])
+
 class Evaluator(object):
 
     def __init__(self):
@@ -155,3 +161,17 @@ for i in range(iterations):
     end_time = time.time()
     print('Image saved as', fname)
     print('Iteration %d completed in %ds' % (i, end_time - start_time))
+
+from matplotlib import pyplot as plt
+
+# Content image
+plt.imshow(load_img(target_image_path, target_size=(img_height, img_width)))
+plt.figure()
+
+# Style image
+plt.imshow(load_img(style_reference_image_path, target_size=(img_height, img_width)))
+plt.figure()
+
+# Generate image
+plt.imshow(img)
+plt.show()
