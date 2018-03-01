@@ -53,9 +53,13 @@ print('Model loaded.')
 def content_loss(base, combination):
     return K.sum(K.square(combination - base))
 
+import tensorflow as tf
 def gram_matrix(x):
+    # x = tf.Print(x, [tf.shape(x)], message='x')
     features = K.batch_flatten(K.permute_dimensions(x, (2, 0, 1)))
+    # features = tf.Print(features, [tf.shape(features)], message='feature')
     gram = K.dot(features, K.transpose(features))
+    # gram = tf.Print(gram, [tf.shape(gram)], message="gram")
     return gram
 
 
@@ -156,10 +160,10 @@ for i in range(iterations):
     # Save current generated image
     img = x.copy().reshape((img_height, img_width, 3))
     img = deprocess_image(img)
-    fname = result_prefix + '_at_iteration_%d.png' % i
-    imsave(fname, img)
+    # fname = result_prefix + '_at_iteration_%d.png' % i
+    # imsave(fname, img)
     end_time = time.time()
-    print('Image saved as', fname)
+    # print('Image saved as', fname)
     print('Iteration %d completed in %ds' % (i, end_time - start_time))
 
 from matplotlib import pyplot as plt
