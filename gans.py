@@ -82,7 +82,7 @@ x_train = x_train.reshape(
 
 iterations = 10000
 batch_size = 20
-save_dir = 'H:/keras_example/'
+save_dir = '/home/liuml/keras/'
 
 # Start training loop
 start = 0
@@ -138,7 +138,7 @@ for step in range(iterations):
         img = image.array_to_img(real_images[0] * 255., scale=False)
         img.save(os.path.join(save_dir, 'real_frog' + str(step) + '.png'))
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 # Sample random points in the latent space
 random_latent_vectors = np.random.normal(size=(10, latent_dim))
@@ -148,6 +148,6 @@ generated_images = generator.predict(random_latent_vectors)
 
 for i in range(generated_images.shape[0]):
     img = image.array_to_img(generated_images[i] * 255., scale=False)
-    plt.figure()
-    plt.imshow(img)
-    plt.show()
+    # plt.figure()
+    # plt.imshow(img)
+    # plt.show()
