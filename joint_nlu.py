@@ -1,9 +1,12 @@
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import random
 import numpy as np
+import keras as K
 from keras.layers import Dense, LSTM, Embedding, Bidirectional, Input
 from keras.models import Model
 from keras.losses import categorical_crossentropy
-from keras.utils import to_categorical
 
 flatten = lambda l: [item for sublist in l for item in sublist]  # 二维展成一维
 index_seq2slot = lambda s, index2slot: [index2slot[i] for i in s]
@@ -130,32 +133,109 @@ def train(is_debug=False):
 
     intents = [item[3] for item in index_train]
     intent_labels = np.eye(intent_size)[np.array(intents)]
-    # intent_labels[:, np.array(intents)] = 1
-    # intent_labels = to_categorical(index_train[2], num_classes=intent_size)
     intent_train = [item[0] for item in index_train]
+    intent_train = np.array(intent_train)
+    slot_train = [item[2] for item in index_train]
+    slot_train = np.array(slot_train)
+    slot_train_target = np.insert(slot_train, 0, values=0, axis=1)
+    slot_train_target = np.delete(slot_train_target, slot_train_target.shape[1] - 1, axis=1)
+    slot_train_target = np.eye(slot_size)[slot_train_target]
+    print(slot_train[0:2, :])
+    print(slot_train_target[0:2, :])
 
     import tensorflow as tf
     from keras.layers import Lambda
     print_func = Lambda(lambda x: tf.Print(x, [tf.shape(x)]))
+
+    # encoder define
     input_voc = Input(shape=(input_steps,))
-    embeding_voc = Embedding(input_dim=vocab_size, output_dim=embedding_size, input_length=input_steps, mask_zero=True)(input_voc)
-    lstm1 = Bidirectional(LSTM(units=hidden_size, dropout=0.7, return_sequences=True), merge_mode=None)(embeding_voc)
-    print(len(lstm1))
-    # lstm1 = print_func(lstm1)
-    encoder = Bidirectional(LSTM(units=hidden_size, dropout=0.7, return_sequences=False))(lstm1)
-    intent = Dense(intent_size, activation="sigmoid")(encoder)
+    embedding_voc = Embedding(input_dim=vocab_size, output_dim=embedding_size, input_length=input_steps,
+                              mask_zero=True)
+    embedding_voc_out = embedding_voc(input_voc)
+    encoder_lstm1 = Bidirectional(LSTM(units=hidden_size, dropout=0.7, return_sequences=True), merge_mode="concat")
+    encoder_lstm1_out = encoder_lstm1(embedding_voc_out)
+
+    # encoder
+    encoder = Bidirectional(
+        LSTM(units=hidden_size, dropout=0.7, return_sequences=False, return_state=True),
+        merge_mode="concat")
+
+    # encoder output, states
+    encoder_out, forward_h, forward_c, backward_h, backward_c = encoder(encoder_lstm1_out)
+    encoder_state = [forward_h, forward_c, backward_h, backward_c]
+
+    # intent
+    intent = Dense(intent_size, activation="linear")(encoder)
     intent = Dense(intent_size, activation="softmax")(intent)
-    model = Model(inputs=input_voc, outputs=intent)
-    model.compile(optimizer="adam", loss=categorical_crossentropy, metrics=["acc"])
-    acc = model.fit(intent_train, intent_labels, batch_size=batch_size, epochs=1)
-    model.save_weights("nlu.hdf5")
+
+    # decoder define
+    input_slot = Input(shape=(input_steps,))
+    embedding_slot = Embedding(input_dim=slot_size, output_dim=embedding_size, input_length=input_steps,
+                               mask_zero=True)
+    embedding_slot_out = embedding_slot(input_slot)
+    decoder_lstm1 = Bidirectional(LSTM(units=hidden_size, dropout=0.7, return_sequences=True), merge_mode="concat")
+    decoder_lstm1_out = decoder_lstm1(
+        embedding_slot_out, initial_state=[forward_h, forward_c, backward_h, backward_c])
+    decoder = Bidirectional(
+        LSTM(units=hidden_size, dropout=0.7, return_sequences=True, return_state=True),
+        merge_mode="concat")
+    decoder_output, forward_h, forward_c, backward_h, backward_c = decoder(decoder_lstm1_out)
+
+    decoder_output = Dense(slot_size, activation="linear")(decoder_output)
+    decoder_output = Dense(slot_size, activation="softmax")(decoder_output)
+    decoder_state = [forward_h, forward_c, backward_h, backward_c]
+
+    model = Model(inputs=[input_voc, input_slot], outputs=[intent, decoder_output])
+    print(model.summary())
+
+    def intent_slot_loss(y_true, y_pred):
+        y_slot_true = y_true[0]
+        y_intent_true = y_true[1]
+        y_slot_pred = y_pred[0]
+        y_intent_pred = y_pred[1]
+
+        return K.losses.categorical_crossentropy(y_slot_true, y_slot_pred) + K.losses.categorical_crossentropy(
+            y_intent_true, y_intent_pred)
+
+    # model.compile(optimizer="adam", loss=categorical_crossentropy, metrics=["acc"])
+    # acc = model.fit([intent_train, slot_train], [intent_labels, slot_train_target], batch_size=batch_size, epochs=1)
+    # print(acc)
+    # model.save_weights("nlu.hdf5")
     model.load_weights("nlu.hdf5")
 
-    intents = [item[3] for item in index_test]
-    intent_labels = np.eye(intent_size)[np.array(intents)]
-    intent_test = [item[0] for item in index_test]
-    result = model.evaluate(intent_test, intent_labels)
-    print(result)
+    ## inference
+    encoder = Model(input_voc, encoder_state)
+
+    # decoder
+    decoder_in = Input(shape=(1,))
+    decoder_state_in_h1 = Input(shape=(hidden_size,))
+    decoder_state_in_c1 = Input(shape=(hidden_size,))
+    decoder_state_in_h2 = Input(shape=(hidden_size,))
+    decoder_state_in_c2 = Input(shape=(hidden_size,))
+    decoder_state_in = [decoder_state_in_h1, decoder_state_in_c1, decoder_state_in_h2, decoder_state_in_c2]
+    decoder_embedding = Embedding(input_dim=slot_size, output_dim=embedding_size,
+                                  mask_zero=True)
+    decoder_embedding_out = decoder_embedding(decoder_in)
+
+    decoder_out, forward_h, forward_c, backward_h, backward_c = decoder(embedding_slot)
+    decoder_out = Dense(slot_size, activation="linear")(decoder_out)
+    decoder_out = Dense(slot_size, activation="softmax")(decoder_out)
+    decoder_out = np.argmax(decoder_out)
+    decoder_state_out = forward_h, forward_c, backward_h, backward_c
+    decoder = Model([decoder_in] + decoder_state_in, [decoder_out] + decoder_state_out)
+
+    i = 0
+    seq = np.array(index_test[0][0])
+    encoder_state = encoder.predict(seq)
+    while i < input_steps:
+        i = i + 1
+
+    # intents = [item[3] for item in index_test]
+    # intent_labels = np.eye(intent_size)[np.array(intents)]
+    # intent_test = [item[0] for item in index_test]
+    # result = model.evaluate(np.array(intent_test), intent_labels)
+    # print(result)
+
 
 if __name__ == "__main__":
     train()
